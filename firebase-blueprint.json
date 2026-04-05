@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "address": { "type": "string" },
+        "paymentMethods": { "type": "array" },
+        "activity": { "type": "array" },
+        "preferredDeliverySlot": { "type": "string", "enum": ["Morning (9 AM - 12 PM)", "Afternoon (1 PM - 4 PM)", "Evening (5 PM - 8 PM)"] }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Restaurant": {
+      "title": "Restaurant",
+      "description": "Restaurant information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "rating": { "type": "number" },
+        "cuisine": { "type": "string" },
+        "operatingHours": { "type": "string" },
+        "estimatedDeliveryTime": { "type": "string" }
+      },
+      "required": ["name", "image"]
+    },
+    "MenuItem": {
+      "title": "Menu Item",
+      "description": "A food item in a restaurant's menu",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["name", "price", "image"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A food delivery order",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "on-the-way", "delivered", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deliveryAddress": { "type": "string" },
+        "statusHistory": { "type": "array" },
+        "rating": { "type": "number" },
+        "feedback": { "type": "string" },
+        "isReviewed": { "type": "boolean" },
+        "deliverySlot": { "type": "string", "enum": ["Morning (9 AM - 12 PM)", "Afternoon (1 PM - 4 PM)", "Evening (5 PM - 8 PM)"] }
+      },
+      "required": ["userId", "restaurantId", "items", "total", "status", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A restaurant review",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "orderId": { "type": "string" },
+        "rating": { "type": "number" },
+        "feedback": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "orderId", "rating", "feedback", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/restaurants/{restaurantId}": {
+      "schema": "Restaurant",
+      "description": "Restaurants"
+    },
+    "/restaurants/{restaurantId}/menu/{itemId}": {
+      "schema": "MenuItem",
+      "description": "Menu items for a restaurant"
+    },
+    "/restaurants/{restaurantId}/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Reviews for a restaurant"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Orders"
+    }
+  }
+}

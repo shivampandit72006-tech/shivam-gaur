@@ -1,0 +1,189 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, format: email)
+    //   - displayName: string
+    //   - photoURL: string
+    //   - role: string (required, enum: ['user', 'admin'])
+    //   - address: string
+    //
+    // Collection: restaurants
+    // Document ID: {restaurantId}
+    // Fields:
+    //   - name: string (required)
+    //   - description: string
+    //   - image: string (required)
+    //   - rating: number
+    //   - cuisine: string
+    //   - operatingHours: string
+    //   - estimatedDeliveryTime: string
+    //
+    // Collection: restaurants/{restaurantId}/menu
+    // Document ID: {itemId}
+    // Fields:
+    //   - name: string (required)
+    //   - description: string
+    //   - price: number (required)
+    //   - image: string (required)
+    //   - category: string
+    //
+    // Collection: orders
+    // Document ID: {orderId}
+    // Fields:
+    //   - userId: string (required)
+    //   - userName: string
+    //   - userPhoto: string
+    //   - restaurantId: string (required)
+    //   - items: list (required)
+    //   - total: number (required)
+    //   - status: string (required, enum: ['pending', 'preparing', 'on-the-way', 'delivered', 'cancelled'])
+    //   - createdAt: timestamp (required)
+    //   - deliveryAddress: string
+    //   - statusHistory: list
+    //   - isReviewed: boolean
+    //
+    // Collection: restaurants/{restaurantId}/reviews
+    // Document ID: {reviewId}
+    // Fields:
+    //   - userId: string (required)
+    //   - userName: string (required)
+    //   - userPhoto: string
+    //   - orderId: string (required)
+    //   - rating: number (required, 1-5)
+    //   - feedback: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+         (request.auth.token.email == "shivamgaur72004@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      let allowedFields = ['uid', 'email', 'displayName', 'photoURL', 'role', 'address', 'paymentMethods', 'activity', 'preferredDeliverySlot'];
+      return data.keys().hasOnly(allowedFields) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['user', 'admin'] &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('address' in data) || (data.address is string && data.address.size() < 500)) &&
+             (!('paymentMethods' in data) || data.paymentMethods is list) &&
+             (!('activity' in data) || data.activity is list) &&
+             (!('preferredDeliverySlot' in data) || (data.preferredDeliverySlot in ['Morning (9 AM - 12 PM)', 'Afternoon (1 PM - 4 PM)', 'Evening (5 PM - 8 PM)'] || data.preferredDeliverySlot == null));
+    }
+
+    function isValidRestaurant(data) {
+      let allowedFields = ['name', 'description', 'image', 'rating', 'cuisine', 'operatingHours', 'estimatedDeliveryTime'];
+      return data.keys().hasOnly(allowedFields) &&
+             data.keys().hasAll(['name', 'image']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.image is string && data.image.size() > 0 &&
+             (!('operatingHours' in data) || (data.operatingHours is string && data.operatingHours.size() < 100)) &&
+             (!('estimatedDeliveryTime' in data) || (data.estimatedDeliveryTime is string && data.estimatedDeliveryTime.size() < 50));
+    }
+
+    function isValidMenuItem(data) {
+      let allowedFields = ['name', 'description', 'price', 'image', 'category'];
+      return data.keys().hasOnly(allowedFields) &&
+             data.keys().hasAll(['name', 'price', 'image']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.price is number && data.price >= 0 &&
+             data.image is string;
+    }
+
+    function isValidOrder(data) {
+      let allowedFields = ['userId', 'userName', 'userPhoto', 'restaurantId', 'items', 'total', 'status', 'createdAt', 'deliveryAddress', 'statusHistory', 'rating', 'feedback', 'isReviewed', 'deliverySlot'];
+      return data.keys().hasOnly(allowedFields) &&
+             data.keys().hasAll(['userId', 'restaurantId', 'items', 'total', 'status', 'createdAt']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.restaurantId is string &&
+             data.items is list &&
+             data.total is number && data.total >= 0 &&
+             data.status in ['pending', 'preparing', 'on-the-way', 'delivered', 'cancelled'] &&
+             data.createdAt is timestamp &&
+             (!('userName' in data) || data.userName is string) &&
+             (!('userPhoto' in data) || (data.userPhoto is string || data.userPhoto == null)) &&
+             (!('deliveryAddress' in data) || data.deliveryAddress is string) &&
+             (!('statusHistory' in data) || data.statusHistory is list) &&
+             (!('rating' in data) || (data.rating is number && data.rating >= 1 && data.rating <= 5)) &&
+             (!('feedback' in data) || (data.feedback is string && data.feedback.size() < 1000)) &&
+             (!('isReviewed' in data) || data.isReviewed is bool) &&
+             (!('deliverySlot' in data) || (data.deliverySlot in ['Morning (9 AM - 12 PM)', 'Afternoon (1 PM - 4 PM)', 'Evening (5 PM - 8 PM)'] || data.deliverySlot == null));
+    }
+
+    function isValidReview(data) {
+      let allowedFields = ['userId', 'userName', 'userPhoto', 'orderId', 'rating', 'feedback', 'createdAt'];
+      return data.keys().hasOnly(allowedFields) &&
+             data.keys().hasAll(['userId', 'userName', 'orderId', 'rating', 'feedback', 'createdAt']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() > 0 &&
+             data.orderId is string &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.feedback is string && data.feedback.size() > 0 && data.feedback.size() < 1000 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'user';
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) || isAdmin();
+    }
+
+    match /restaurants/{restaurantId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /menu/{itemId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isAuthenticated() && isValidReview(request.resource.data);
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidOrder(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (resource.data.userId == request.auth.uid && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusHistory']) && request.resource.data.status == 'cancelled' && resource.data.status == 'pending') ||
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'feedback', 'isReviewed']) && resource.data.status == 'delivered')
+        )) ||
+        (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusHistory']) && request.resource.data.status in ['preparing', 'on-the-way', 'delivered', 'cancelled'])
+      );
+    }
+  }
+}
